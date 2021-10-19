@@ -9,3 +9,8 @@ vaccine passport system for Newfoundland & Labrador.
 `verify` ::
 A script that can be used to decode and verify the digital signature of an
 NLVaxPass QR code
+
+== Writing
+
+`nlvaxpass.bib` ::
+A bibliography of relevant references.
