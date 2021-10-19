@@ -36,12 +36,6 @@ def decode(qr_file):
 
     jws, header, payload, signature = parse_qrs(qr_file)
 
-    if 'zip' not in header:
-        raise ValueError(f'Missing required "zip" value: {header}')
-
-    if header['zip'] != 'DEF':
-        raise ValueError(f'"zip" value not "DEF" (DEFLATE): {header["zip"]}')
-
     #
     # Decompress the payload. Don't expect normal gz or zlib header bytes.
     #
@@ -50,6 +44,12 @@ def decode(qr_file):
     # the issuer of the signature verification key is embedded in the payload,
     # so we need to do the expansion now.
     #
+    if 'zip' not in header:
+        raise ValueError(f'Missing required "zip" value: {header}')
+
+    if header['zip'] != 'DEF':
+        raise ValueError(f'"zip" value not "DEF" (DEFLATE): {header["zip"]}')
+
     payload = zlib.decompressobj(-zlib.MAX_WBITS).decompress(payload)
     payload = json.loads(payload)
 
