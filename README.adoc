@@ -3,3 +3,9 @@
 Scripts and other things related to the
 https://www.gov.nl.ca/covid-19/life-during-covid-19/vaccination-record[NLVaxPass]
 vaccine passport system for Newfoundland & Labrador.
+
+== Code
+
+`verify` ::
+A script that can be used to decode and verify the digital signature of an
+NLVaxPass QR code
