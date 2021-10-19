@@ -1,0 +1,188 @@
+#!/usr/bin/env python3
+#
+# Copyright 2021 Jonathan Anderson
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import base64
+import sys
+
+import click
+import jose
+import jose.jws
+import json
+import requests
+import zlib
+
+from PIL import Image
+from pyzbar import pyzbar
+
+
+@click.command()
+@click.argument('qr-file', type=click.File('rb'))
+def decode(qr_file):
+    """Decode and verify a SMART Health Card encoded in a QR code.
+    """
+
+    jws, header, payload, signature = parse_qrs(qr_file)
+
+    if 'zip' not in header:
+        raise ValueError(f'Missing required "zip" value: {header}')
+
+    if header['zip'] != 'DEF':
+        raise ValueError(f'"zip" value not "DEF" (DEFLATE): {header["zip"]}')
+
+    #
+    # Decompress the payload. Don't expect normal gz or zlib header bytes.
+    #
+    # Normally we'd like to hold off on expanding compressed data until after
+    # we've verified the signature to avoid expansion attacks, but unfortunately
+    # the issuer of the signature verification key is embedded in the payload,
+    # so we need to do the expansion now.
+    #
+    payload = zlib.decompressobj(-zlib.MAX_WBITS).decompress(payload)
+    payload = json.loads(payload)
+
+    #
+    # Verify the signature!
+    #
+    kid, issuer = verify_signature(jws, header, payload, signature)
+    print(f'Verified signature with key {kid} from:')
+    print(issuer)
+    print()
+
+    #
+    # Examine resource entries within the card to print information about
+    # the patient and their vaccinations.
+    #
+    resources = payload['vc']['credentialSubject']['fhirBundle']['entry']
+    for r in resources:
+        print_resource(r['resource'])
+
+
+def b64decode(s):
+    """Decode a Base64URL-encoded string, adding padding if necessary.
+    """
+
+    padded = s + '=' * (4 - len(s) % 4)
+    return base64.urlsafe_b64decode(padded)
+
+
+def parse_qrs(qr_file):
+    """Parse an SHC QR code into a JWS token and its components.
+    """
+
+    img = Image.open(qr_file)
+    qrs = pyzbar.decode(img)
+
+    numeric = ''
+
+    # The image file may contain multiple QR codes
+    for i, qr in enumerate(qrs):
+        # Ensure that this is a SMART Health Card
+        try:
+            scheme, data = qr.data.decode().split(':/')
+        except ValueError:
+            raise ValueError(f'Not a URI: {qr}')
+
+        if scheme != 'shc':
+            raise ValueError(f'Not a SMART Health Card: {qr}')
+
+        # This is an SHC QR code; append it to the full SHC string
+        numeric += data
+
+
+    # Decode the numeric-encoded data into JWS tokens
+    digit_pairs = map(''.join, zip(*[iter(numeric)]*2))
+    jws = ''.join([chr(int(word)+45) for word in digit_pairs])
+
+    try:
+        header, payload, signature = [b64decode(s) for s in jws.split('.')]
+    except ValueError:
+        raise ValueError(f'Not a JSON Web Signature: {jws}')
+
+    header = json.loads(header)
+
+    return jws, header, payload, signature
+
+
+def print_resource(r):
+    """Print information about an FHIR "Resource" contained in an SHC card.
+    """
+
+    if r['resourceType'] == 'Patient':
+        for name in r['name']:
+            print(' '.join(name['given']) + ' ' + name['family'])
+
+    elif r['resourceType'] == 'Immunization':
+        print(r['occurrenceDateTime'], ':', r['manufacturer']['identifier'])
+
+    else:
+        print(r)
+
+
+def verify_signature(jws, header, payload, signature):
+    """Verify a JWS digital signature via an issuer's JSON Web Key set.
+
+    Will raise an exception if an invalid signature is detected.
+    """
+
+    #
+    # The SMART Health Card standard requires the ES256 signature algorithm.
+    #
+    if 'alg' not in header:
+        raise ValueError(f'Missing signature algorithm: {header}')
+
+    if header['alg'] != 'ES256':
+        raise ValueError(f'Invalid signature algorithm: {header["alg"]}')
+
+    #
+    # Fetch verification key from the specified issuer.
+    #
+    if 'iss' not in payload:
+        raise ValueError(f'Missing issuer: {payload}')
+
+    issuer = payload['iss']
+    url = payload['iss'] + '/.well-known/jwks.json'
+    r = requests.get(url, headers={'User-Agent': 'vax-verify/0.1.0'})
+    keys = r.json()
+
+    key = None
+    for k in keys['keys']:
+        if k['kid'] == header['kid']:
+            key = k
+            break
+
+    if not key:
+        raise ValueError(f'Key {header["kid"]} not found in {keys}')
+
+
+    #
+    # Verify the signature!
+    #
+    try:
+        jose.jws.verify(jws, key, header['alg'])
+    except jose.exceptions.JWSError:
+        raise ValueError('Invalid digital signature')
+
+    return header['kid'], issuer
+
+
+if __name__ == '__main__':
+    try:
+        decode()
+
+    except ValueError as e:
+        sys.stderr.write(str(e))
+        sys.stderr.write('\n')
+        sys.exit(1)
