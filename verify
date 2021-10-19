@@ -101,7 +101,6 @@ def parse_qrs(qr_file):
         # This is an SHC QR code; append it to the full SHC string
         numeric += data
 
-
     # Decode the numeric-encoded data into JWS tokens
     digit_pairs = map(''.join, zip(*[iter(numeric)]*2))
     jws = ''.join([chr(int(word)+45) for word in digit_pairs])
@@ -165,7 +164,6 @@ def verify_signature(jws, header, payload, signature):
 
     if not key:
         raise ValueError(f'Key {header["kid"]} not found in {keys}')
-
 
     #
     # Verify the signature!
