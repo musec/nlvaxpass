@@ -1,0 +1,5 @@
+= NLVaxPass
+
+Scripts and other things related to the
+https://www.gov.nl.ca/covid-19/life-during-covid-19/vaccination-record[NLVaxPass]
+vaccine passport system for Newfoundland & Labrador.
