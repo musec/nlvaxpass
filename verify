@@ -153,17 +153,14 @@ def verify_signature(jws, header, payload, signature):
 
     issuer = payload['iss']
     url = payload['iss'] + '/.well-known/jwks.json'
-    r = requests.get(url, headers={'User-Agent': 'vax-verify/0.1.0'})
-    keys = r.json()
+    jwks = requests.get(url, headers={'User-Agent': 'vax-verify/0.1.0'}).json()
 
-    key = None
-    for k in keys['keys']:
-        if k['kid'] == header['kid']:
-            key = k
-            break
-
-    if not key:
+    # Construct dict mapping key IDs to keys
+    keys = {k['kid']:k for k in jwks['keys']}
+    if header['kid'] not in keys:
         raise ValueError(f'Key {header["kid"]} not found in {keys}')
+
+    key = keys[header['kid']]
 
     #
     # Verify the signature!
