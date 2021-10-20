@@ -156,7 +156,7 @@ def verify_signature(jws, header, payload, signature):
     jwks = requests.get(url, headers={'User-Agent': 'vax-verify/0.1.0'}).json()
 
     # Construct dict mapping key IDs to keys
-    keys = {k['kid']:k for k in jwks['keys']}
+    keys = {k['kid']: k for k in jwks['keys']}
     if header['kid'] not in keys:
         raise ValueError(f'Key {header["kid"]} not found in {keys}')
 
