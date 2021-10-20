@@ -33,7 +33,6 @@ from pyzbar import pyzbar
 def decode(qr_file):
     """Decode and verify a SMART Health Card encoded in a QR code.
     """
-
     jws, header, payload, signature = parse_qrs(qr_file)
 
     #
@@ -73,7 +72,6 @@ def decode(qr_file):
 def b64decode(s):
     """Decode a Base64URL-encoded string, adding padding if necessary.
     """
-
     padded = s + '=' * (4 - len(s) % 4)
     return base64.urlsafe_b64decode(padded)
 
@@ -81,7 +79,6 @@ def b64decode(s):
 def parse_qrs(qr_file):
     """Parse an SHC QR code into a JWS token and its components.
     """
-
     img = Image.open(qr_file)
     qrs = pyzbar.decode(img)
 
@@ -118,7 +115,6 @@ def parse_qrs(qr_file):
 def print_resource(r):
     """Print information about an FHIR "Resource" contained in an SHC card.
     """
-
     if r['resourceType'] == 'Patient':
         for name in r['name']:
             print(' '.join(name['given']) + ' ' + name['family'])
@@ -135,7 +131,6 @@ def verify_signature(jws, header, payload, signature):
 
     Will raise an exception if an invalid signature is detected.
     """
-
     #
     # The SMART Health Card standard requires the ES256 signature algorithm.
     #
@@ -155,7 +150,9 @@ def verify_signature(jws, header, payload, signature):
     url = payload['iss'] + '/.well-known/jwks.json'
     jwks = requests.get(url, headers={'User-Agent': 'vax-verify/0.1.0'}).json()
 
-    # Construct dict mapping key IDs to keys
+    #
+    # Fetch specified key from dict mapping key IDs to keys
+    #
     keys = {k['kid']: k for k in jwks['keys']}
     if header['kid'] not in keys:
         raise ValueError(f'Key {header["kid"]} not found in {keys}')
